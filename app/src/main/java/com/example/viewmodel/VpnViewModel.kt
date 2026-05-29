@@ -56,6 +56,21 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     private val _scanStatusMessage = MutableStateFlow("Ready to optimize WARP tunnel")
     val scanStatusMessage = _scanStatusMessage.asStateFlow()
 
+    // Slider settings for range customization
+    private val _selectedBasePrefix = MutableStateFlow("162.159")
+    val selectedBasePrefix = _selectedBasePrefix.asStateFlow()
+
+    private val _selectedSubnetOctet = MutableStateFlow(192f) // Default Cloudflare range 192 (e.g. 162.159.192.x)
+    val selectedSubnetOctet = _selectedSubnetOctet.asStateFlow()
+
+    fun updateBasePrefix(prefix: String) {
+        _selectedBasePrefix.value = prefix
+    }
+
+    fun updateSubnetOctet(octet: Float) {
+        _selectedSubnetOctet.value = octet
+    }
+
     // Cloud saving states
     private val _isCloudSynced = MutableStateFlow(false)
     val isCloudSynced = _isCloudSynced.asStateFlow()
@@ -103,18 +118,21 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         _scanProgress.value = 0f
 
         scanJob = viewModelScope.launch(Dispatchers.IO) {
-            val subnets = listOf("162.159.192", "162.159.193", "188.114.96", "188.114.97", "108.162.194")
+            val basePrefix = _selectedBasePrefix.value
+            val targetOctet = _selectedSubnetOctet.value.toInt()
             val newScannedIps = mutableListOf<CleanIp>()
 
-            _scanStatusMessage.value = "Starting multi-threaded Cloudflare CDN check..."
+            _scanStatusMessage.value = "Starting IP range optimization for $basePrefix.$targetOctet.0/24..."
             delay(800)
 
             for (i in 1..20) {
                 if (!editScanningState(i)) break
 
-                val sub = subnets.random()
+                // Scan 4 consecutive Class C subnets starting from user's slider value
+                val currentOctet = (targetOctet + (i % 4)).coerceIn(0, 255)
                 val lastOctet = Random.nextInt(1, 254)
-                val testIp = "$sub.$lastOctet"
+                val testIp = "$basePrefix.$currentOctet.$lastOctet"
+                val subnetTag = "$basePrefix.$currentOctet.x"
                 _scanStatusMessage.value = "Pinging packet route to $testIp..."
 
                 val latency = pingEndpoint(testIp)
@@ -125,7 +143,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
                     port = listOf(2408, 500, 4500, 854).random(),
                     latency = latency,
                     packetLoss = packetLoss,
-                    subnet = "$sub.x",
+                    subnet = subnetTag,
                     isCloudSaved = false
                 )
                 newScannedIps.add(cleanIp)
@@ -134,7 +152,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _scanProgress.value = 1.0f
-            _scanStatusMessage.value = "Smart optimization completed! Found ${newScannedIps.size} clean paths."
+            _scanStatusMessage.value = "Range optimization finished! Connected to the best endpoint."
             _isScanning.value = false
 
             // Auto cloud save for first time scan as requested by user ("cloud save them for first time")

@@ -91,6 +91,9 @@ fun VpnDashboardScreen(
     val isCloudSaving by viewModel.isCloudSaving.collectAsStateWithLifecycle()
     val syncStatusMessage by viewModel.syncMessage.collectAsStateWithLifecycle()
 
+    val selectedBasePrefix by viewModel.selectedBasePrefix.collectAsStateWithLifecycle()
+    val selectedSubnetOctet by viewModel.selectedSubnetOctet.collectAsStateWithLifecycle()
+
     var selectedIpForConnect by remember { mutableStateOf<CleanIp?>(null) }
 
     // Launcher to capture VPN system authorization dialog result
@@ -184,12 +187,16 @@ fun VpnDashboardScreen(
                 )
             }
 
-            // Item 3: Multi-threaded IP Optimizer Scanner
+            // Item 3: Multi-threaded IP Optimizer Scanner and Prefix Slider Range
             item {
                 SmartSpeedScannerCard(
                     isScanning = isScanning,
                     progress = scanProgress,
                     statusText = scanStatusMessage,
+                    selectedBasePrefix = selectedBasePrefix,
+                    selectedSubnetOctet = selectedSubnetOctet,
+                    onBasePrefixChanged = { viewModel.updateBasePrefix(it) },
+                    onSubnetOctetChanged = { viewModel.updateSubnetOctet(it) },
                     onStartScan = { viewModel.startSmartCleanIpScan() }
                 )
             }
@@ -551,6 +558,10 @@ fun SmartSpeedScannerCard(
     isScanning: Boolean,
     progress: Float,
     statusText: String,
+    selectedBasePrefix: String,
+    selectedSubnetOctet: Float,
+    onBasePrefixChanged: (String) -> Unit,
+    onSubnetOctetChanged: (Float) -> Unit,
     onStartScan: () -> Unit
 ) {
     Card(
@@ -605,7 +616,90 @@ fun SmartSpeedScannerCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderSlate))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Subnet Prefix Row Selector
+            Text(
+                text = "Target IP Subnet Base",
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedTextSlate,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("162.159", "188.114", "108.162").forEach { prefix ->
+                    val isSelected = selectedBasePrefix == prefix
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(
+                                if (isSelected) WarmOrange.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.03f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (isSelected) WarmOrange else BorderSlate,
+                                RoundedCornerShape(8.dp)
+                            )
+                            .clickable(enabled = !isScanning) { onBasePrefixChanged(prefix) }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = prefix,
+                            color = if (isSelected) WarmOrange else Color.White,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Third Octet Dynamic Slider Controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Adjust Third Octet (Range Class)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MutedTextSlate,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${selectedBasePrefix}.${selectedSubnetOctet.toInt()}.x",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ElectricBlue,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Slider(
+                value = selectedSubnetOctet,
+                onValueChange = { onSubnetOctetChanged(it) },
+                valueRange = 0f..255f,
+                steps = 255,
+                colors = SliderDefaults.colors(
+                    thumbColor = WarmOrange,
+                    activeTrackColor = WarmOrange,
+                    inactiveTrackColor = BorderSlate,
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent
+                ),
+                enabled = !isScanning,
+                modifier = Modifier.testTag("subnet_range_slider")
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = statusText,
